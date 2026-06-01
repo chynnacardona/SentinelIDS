@@ -1,0 +1,43 @@
+HELP.md
+
+# Match these folders NO MATTER how deep they are nested
+**/.gradle/
+**/build/
+**/bin/
+**/out/
+**/nb-cache/
+**/buildOutputCleanup/
+
+# Specific junk files to drop
+**/file-system.probe
+**/.DS_Store
+**/server.log
+**/*.log
+
+# Keep the essential wrapper jar if needed
+!**/gradle/wrapper/gradle-wrapper.jar
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
