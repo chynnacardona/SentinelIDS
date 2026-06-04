@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>SentinelWatch Live Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Base layout */
+        body { 
+            font-family: 'Arimo', sans-serif;
+            background-color: #060b13; 
+            color: #d1d5db; 
+            margin: 0; 
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Aligns content to the top instead of centering */
+            overflow-x: hidden;
+            width: 100vw;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* LAYER MANAGEMENT: WebGL background canvas setup */
+        .webgl-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+            pointer-events: none; 
+        }
+        
+        .webgl-background div, .webgl-background iframe, .webgl-background canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* CSS HARD REMOVAL: Hides watermark elements by style injection */
+        .unicorn-watermark, 
+        [class*="brand"], [id*="brand"], [class*="watermark"], [id*="watermark"],
+        a[href*="unicorn.studio"], div[style*="fixed"] > a, div[style*="absolute"] > a {
+            display: none !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            width: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* FOREGROUND: Card Element shifted towards the top */
+        .dashboard-container {
+            position: relative;
+            z-index: 2;
+            width: 92%;
+            max-width: 1200px;
+            background: rgba(10, 20, 38, 0.55);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 40px 45px;
+            border-radius: 24px; 
+            margin-top: 50px; 
+            margin-bottom: 50px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8), 
+                        inset 0 1px 2px rgba(255, 255, 255, 0.1);
+        }
+
+        /* Title Style: Iosevka Charon Mono, Bold */
+        h1 { 
+            font-family: 'Iosevka Charon Mono', monospace;
+            font-weight: 700; 
+            color: #ffffff; 
+            font-size: 1.55rem;
+            letter-spacing: 0.08em;
+            margin-top: 0;
+            margin-bottom: 18px;
+        }
+
+        /* Connection Row Style: Arimo, Normal Weight */
+        .status-container { 
+            font-family: 'Arimo', sans-serif;
+            font-weight: 400; 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
+            padding-bottom: 25px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15); 
+            font-size: 0.9rem; 
+            color: #94a3b8; 
+            letter-spacing: 0.05em;
+        }
+
+        /* Bold override wrapper dedicated exclusively to the LIVE element */
+        .live-bold {
+            color: #22c55e; 
+            font-weight: 700; 
+        }
+
+        /* Glowing heartbeat pulse element */
+        .dot { 
+            width: 10px; 
+            height: 10px; 
+            background-color: #22c55e; 
+            border-radius: 50%; 
+            display: inline-block; 
+            animation: pulse 2s infinite; 
+            box-shadow: 0 0 10px #22c55e;
+        }
+
+        @keyframes pulse { 
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); } 
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); } 
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } 
+        }
+
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 25px; 
+            table-layout: fixed; /* Fixes proportions and stops word-wrapping bugs */
+        }
+
+        th, td { 
+            padding: 12px 10px; 
+            text-align: left; 
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Column Headers Style: Iosevka Charon Mono */
+        th { 
+            font-family: 'Iosevka Charon Mono', monospace;
+            color: #93c5fd; 
+            text-transform: uppercase; 
+            font-size: 0.8rem; 
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            padding-bottom: 14px;
+        }
+
+        /* Table Data Cells maintain readable clean sans font style layout */
+        td {
+            font-family: 'Arimo', sans-serif;
+            font-size: 0.88rem; /* Scaled down slightly for refined data density */
+            color: #cbd5e1;
+            letter-spacing: 0.02em;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: color 0.15s ease;
+        }
+
+        tr:hover td { 
+            color: #60a5fa; 
+        }
+
+        /* Typography optimizations per field types */
+        .id-text {
+            font-family: 'Iosevka Charon Mono', monospace;
+            color: #64748b;
+        }
+
+        .ip-text {
+            font-family: 'Iosevka Charon Mono', monospace;
+            color: #93c5fd;
+            font-size: 0.85rem;
+        }
+
+        .vector-td {
+            padding-right: 20px; /* Safeguards margin boundaries */
+        }
+
+        .badge { 
+            font-family: 'Iosevka Charon Mono', monospace;
+            color: #60a5fa;
+            font-weight: 500;
+            letter-spacing: 0.03em;
+            font-size: 0.82rem; /* Cleaned up layout presence */
+        }
+
+        .timestamp-text {
+            font-family: 'Iosevka Charon Mono', monospace;
+            color: #94a3b8;
+            font-size: 0.82rem;
+        }
+
+        /* DYNAMIC RED CRIT STYLE: Activated when alert.attemptCount > 3 */
+        .threshold-hit td {
+            color: #f87171 !important; 
+            font-weight: 500;
+        }
+        .threshold-hit .id-text { color: #ef4444 !important; }
+        .threshold-hit .ip-text { color: #fca5a5 !important; }
+        .threshold-hit .badge { color: #f87171 !important; }
+        .threshold-hit .timestamp-text { color: #fca5a5 !important; }
+    </style>
+</head>
+<body>
+
+    <div class="webgl-background">
+        <div style="width: 100%; height: 100%" data-us-project="V4fDNa3rQqASfv3Qhbz9"></div>
+    </div>
+
+    <div class="dashboard-container">
+        <h1>SENTINEL WATCH: INTRUSION DETECTION SYSTEM</h1>
+        <div class="status-container">
+            <span class="dot"></span> Sensor connection: <span class="live-bold">LIVE ACTIVE</span>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 8%;">ID</th>
+                    <th style="width: 24%;">TARGET / ATTACKER</th>
+                    <th style="width: 48%;">THREAT ENGINE VECTOR</th>
+                    <th style="width: 20%;">TIMESTAMP</th>
+                </tr>
+            </thead>
+            <tbody id="alert-table-body">
+                <tr th:each="alert : ${alerts}" th:classappend="${alert.attemptCount > 3} ? 'threshold-hit' : ''">
+                    <td class="id-text" th:text="${alert.id}">1</td>
+                    <td class="ip-text" th:text="${alert.ipAddress}">0.0.0.0</td>
+                    <td class="vector-td"><span class="badge" th:text="${alert.threatType}">CRITICAL</span></td>
+                    <td class="timestamp-text" th:text="${alert.timestamp}">2026-06-02 12:00:00</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script type="text/javascript">
+        !function(){var u=window.UnicornStudio;if(u&&u.init){if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",function(){u.init()})}else{u.init()}}else{window.UnicornStudio={isInitialized:!1};var i=document.createElement("script");i.src="https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.2.1/dist/unicornStudio.umd.js",i.onload=function(){if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",function(){UnicornStudio.init()})}else{UnicornStudio.init()}},(document.head||document.body).appendChild(i)}}();
+    </script>
+
+    <script type="text/javascript">
+        function purgeWatermarks() {
+            document.querySelectorAll('a[href*="unicorn.studio"]').forEach(el => {
+                let parent = el.parentElement;
+                if (parent && parent !== document.body) { parent.remove(); } else { el.remove(); }
+            });
+            document.querySelectorAll('.unicorn-watermark').forEach(el => el.remove());
+        }
+        purgeWatermarks();
+        setInterval(purgeWatermarks, 300);
+    </script>
+
+    <script type="text/javascript">
+        var stompClient = null;
+
+        function connectWebSocket() {
+            var socket = new SockJS('/ws-sentinel');
+            stompClient = Stomp.over(socket);
+            stompClient.debug = null; 
+
+            stompClient.connect({}, function (frame) {
+                console.log('Successfully bound to SentinelWatch pipe.');
+                
+                stompClient.subscribe('/topic/alerts', function (response) {
+                    try {
+                        var alertData = JSON.parse(response.body);
+                        addNewAlertToTable(alertData);
+                    } catch (err) {
+                        console.error("Failed to parse alert payload data structure", err);
+                    }
+                });
+            }, function (error) {
+                console.log('WebSocket connection dropped. Retrying in 3 seconds...');
+                setTimeout(connectWebSocket, 3000); 
+            });
+        }
+
+        function addNewAlertToTable(alert) {
+            var tableBody = document.getElementById("alert-table-body");
+            if (!tableBody) return;
+
+            var newRow = document.createElement("tr");
+
+            // THRESHOLD CHECK: If attempts > 3, append the RED CSS marker class!
+            if (alert.attemptCount && alert.attemptCount > 3) {
+                newRow.className = "threshold-hit";
+            }
+
+            // Injects content matching clean font architectures and balanced table layout rules
+            newRow.innerHTML = `
+                <td class="id-text" style="width: 8%;">${alert.id || 'N/A'}</td>
+                <td class="ip-text" style="width: 24%;">${alert.ipAddress || '0.0.0.0'}</td>
+                <td class="vector-td" style="width: 48%;"><span class="badge">${alert.threatType || 'SUSPICIOUS'}</span></td>
+                <td class="timestamp-text" style="width: 20%;">${alert.timestamp || 'Just Now'}</td>
+            `;
+
+            // Prepends threat rows straight onto the top of the interface data display
+            tableBody.insertBefore(newRow, tableBody.firstChild);
+        }
+
+        // Initialize connection on load
+        connectWebSocket();
+    </script>
+</body>
+</html>

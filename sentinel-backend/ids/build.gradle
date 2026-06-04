@@ -31,6 +31,9 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    //WebSocket:  enables two-way, real-time, bi-directional communication between a client (like a browser) and a server.
 }
 
 tasks.named('test') {
